@@ -1,0 +1,4 @@
+::sysinit:/sbin/startup
+::shutdown:/bin/umount -a -r
+::askfirst:-/bin/busybox sh
+::respawn:/bin/runsvdir -P /var/service

@@ -1,0 +1,33 @@
+#!/bin/busybox sh
+SOCINIT=/sbin/starup-soc
+
+/bin/busybox --install /bin/
+/bin/busybox mount -n -t proc  none /proc
+/bin/busybox mount -n -t sysfs none /sys
+/bin/busybox mount -n -t tmpfs mdev /dev
+
+mkdir /dev/pts
+mount -t devpts devpts /dev/pts
+
+echo /bin/mdev > /proc/sys/kernel/hotplug
+/bin/busybox mdev -s
+
+mount -t tmpfs -o size=48m tmpfs /var
+mkdir /var/empty
+mkdir /var/log
+mkdir /var/run
+mkdir /var/service
+
+ip link set lo up
+ip addr add 127.0.0.1/8 dev lo
+
+if [ -e ${SOCINIT} ] ; then
+    ${SOCINIT}
+fi
+
+sleep 2
+/bin/busybox mdev -s
+
+echo ""
+echo ""
+
