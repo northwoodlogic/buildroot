@@ -1,2 +1,4 @@
 root:x:0:
+tty:x:5:
 sshd:x:22:
+audio:x:444:
