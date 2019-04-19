@@ -1,5 +1,5 @@
 #!/bin/busybox sh
-SOCINIT=/sbin/starup-soc
+SOCINIT=/sbin/board-init
 
 /bin/busybox --install /bin/
 /bin/busybox mount -n -t proc  none /proc
@@ -24,8 +24,6 @@ ip addr add 127.0.0.1/8 dev lo
 if [ -e ${SOCINIT} ] ; then
     ${SOCINIT}
 fi
-
-sleep 2
 /bin/busybox mdev -s
 
 echo ""
