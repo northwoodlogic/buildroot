@@ -1,4 +1,4 @@
 ::sysinit:/sbin/startup
 ::shutdown:/bin/umount -a -r
-::askfirst:-/bin/busybox sh
+::askfirst:-/bin/cttyhack login -f root
 ::respawn:/bin/runsvdir -P /var/service
