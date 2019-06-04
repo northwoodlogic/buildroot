@@ -1,0 +1,144 @@
+#!/bin/sh
+: ${DISK="/dev/sda"}
+: ${BOOT="/dev/sda1"}
+
+# Wait up to 10 seconds for the specified disk device node to show up. USB
+# attached storage is sometimes slow to arrive.
+function wait_for_disk() {
+	local _n=10
+	while [ ${_n} -gt 0 ] ; do
+		if [ -e $1 ] ; then
+			return 0
+		fi
+		_n="$(( _n - 1 ))"
+		sleep 1
+	done
+	return 1
+}
+
+# Mount /boot if the device exists, on ERL3 this is a VFAT partition.
+function mount_boot() {
+	wait_for_disk ${BOOT}
+	if [ $? = 0 ] ; then
+		mkdir -p /boot
+		mount -o ro ${BOOT} /boot
+		if [ $? = 0 ] ; then
+			echo "${BOOT} /boot vfat ro 0 0" >> /etc/fstab
+		fi
+	fi
+}
+
+# Mount /stateful, it could be anywhere on the disk
+function mount_stateful() {
+	local _part=""
+	local _label="stateful"
+	wait_for_disk ${DISK}
+	if [ $? != 0 ] ; then
+		return 1
+	fi
+	_part=$(blkid | grep ${_label} | cut -f 1 -d ':')
+	if [ "${_part}" = "" ] ; then
+		return 1
+	fi
+	mkdir -p /${_label}
+	mount -o ro ${_part} ${_label}
+	if [ $? != 0 ] ; then
+		# try to fsck here....and attempt remount
+		return 1
+	fi
+	echo "${_part} /${_label} ext4 ro 0 0" >> /etc/fstab
+}
+
+# Lifted from the buildroot/mdev rc script
+function start_mdev() {
+	echo /sbin/mdev >/proc/sys/kernel/hotplug
+	/sbin/mdev -s
+	# coldplug modules
+	find /sys/ -name modalias -print0 | xargs -0 sort -u | tr '\n' '\0' | \
+		xargs -0 modprobe -bq
+}
+
+# Lifted from the buildroot/haveged rc script
+function start_haveged() {
+	/usr/sbin/haveged -w 1024 -r 0
+}
+
+# Start syslogd with 200KB messages file, 10 deep.
+function start_syslogd() {
+	/sbin/syslogd -b 10
+}
+
+# Restore ssh host keys from the boot partition if they exist.
+# Stateful partition should be formatted ext4 with a "stateful" label.
+function start_sshd() {
+	local _k
+	local _keys
+	local _configd="/stateful/.config/ssh"
+	if [ -d ${_configd} ] ; then
+		_keys="$(ls ${_configd}/*key*)"
+		for _k in ${_keys} ; do
+			case ${_k} in
+				*pub)
+					install -m 644 ${_k} /etc/ssh/`basename ${_k}`
+					;;
+				*)
+					install -m 600 ${_k} /etc/ssh/`basename ${_k}`
+					;;
+			esac
+		done
+	fi
+	/usr/bin/ssh-keygen -A
+	/usr/sbin/sshd
+}
+
+# Restore ssh authorized keys. Only root key works now
+function start_userkey() {
+	local _d
+	local _k
+	local _keys
+	local _configd="/stateful/.config/userkey"
+	if ! [ -d ${_configd} ] ; then
+		return 1
+	fi
+
+	# Authorized keys are all named after the user they belong with.
+	keys="$(ls ${_configd})"
+	for k in ${_keys} ; do
+		if [ ${_k} = "root" ] ; then
+			_d=/root/.ssh
+		else
+			_d=/home/${_k}/.ssh
+		fi
+		mkdir -p ${_d}
+		chmod 700 ${_d}
+		install -m 600 ${_k} ${_d}/authorized_keys
+	done
+
+}
+
+# Bring up loopback interface, implicitly assigns IPv4 & IPv6 addrs
+function start_loopback() {
+	ip link set lo up
+}
+
+# Bring up an ethernet interface. This is where the IF parameters such as MTU
+# or hardware address would be looked up.
+function start_ethernet() {
+	ip link set ${1} up
+}
+
+start_mdev
+start_haveged
+start_loopback
+
+mount_boot
+mount_stateful
+
+# These may try to restore config info from the /boot partition
+start_syslogd
+start_userkey
+start_sshd
+
+# Bring up whatever interfaces are needed.
+start_ethernet eth0
+

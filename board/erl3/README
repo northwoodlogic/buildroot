@@ -1,0 +1,5 @@
+The ERL3 overlay overrides the etc/init.d/rc[SK] scripts. The startup/shutdown
+scripts are replaced with alternates that use sqlite3 to store network
+settings, password hashes, and what services should be started on boot.
+
+
